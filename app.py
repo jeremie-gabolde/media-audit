@@ -1,4 +1,5 @@
 import json
+import hmac
 import logging
 import os
 from datetime import datetime
@@ -13,6 +14,32 @@ import fixer
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
+
+
+AUTH_USERNAME = os.environ.get("MEDIA_AUDIT_USERNAME", "")
+AUTH_PASSWORD = os.environ.get("MEDIA_AUDIT_PASSWORD", "")
+
+
+def authentication_required():
+    response = jsonify({"success": False, "error": "Authentication required"})
+    response.status_code = 401
+    response.headers["WWW-Authenticate"] = 'Basic realm="Media Audit"'
+    return response
+
+
+@app.before_request
+def require_authentication():
+    if not AUTH_USERNAME or not AUTH_PASSWORD:
+        logger.error("MEDIA_AUDIT_USERNAME and MEDIA_AUDIT_PASSWORD must be configured")
+        return jsonify({"success": False, "error": "Authentication is not configured"}), 503
+
+    credentials = request.authorization
+    if not credentials:
+        return authentication_required()
+    if not hmac.compare_digest(credentials.username, AUTH_USERNAME):
+        return authentication_required()
+    if not hmac.compare_digest(credentials.password, AUTH_PASSWORD):
+        return authentication_required()
 
 DATA_DIR = "data"
 RESULTS_FILE = os.path.join(DATA_DIR, "results.json")

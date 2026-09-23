@@ -35,11 +35,20 @@ Build and start the application:
 docker compose up -d --build
 ```
 
+Create a local `.env` file before starting the container. It is ignored by Git:
+
+```dotenv
+MEDIA_AUDIT_USERNAME=your-username
+MEDIA_AUDIT_PASSWORD=use-a-long-unique-password
+```
+
 Open the web interface at:
 
 ```text
 http://NAS-IP:8080
 ```
+
+The web page, API, and static assets require these credentials through HTTP Basic Authentication. Your browser will prompt for them when opening the page.
 
 The default Compose configuration uses `${MEDIA_ROOT:-/volume1/Media}` and expects this host layout:
 
@@ -157,6 +166,6 @@ Runtime scan data is stored in `data/` and is excluded from Docker build context
 
 ## Security
 
-The web interface currently has no authentication. Do not expose port `8080` directly to the public internet. Restrict access with a firewall, reverse proxy authentication, or a private network/VPN.
+The web interface uses HTTP Basic Authentication configured through `MEDIA_AUDIT_USERNAME` and `MEDIA_AUDIT_PASSWORD`. Do not expose port `8080` directly to the public internet because Basic Authentication is not encrypted without HTTPS. Restrict access with a firewall, reverse proxy HTTPS, or a private network/VPN.
 
 The application has read/write access to the mounted media directory because hardlink replacement and Downloads removal are destructive filesystem operations. Use a dedicated container and least-privilege filesystem permissions where possible.
