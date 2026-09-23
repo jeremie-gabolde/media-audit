@@ -110,6 +110,7 @@ function submitFix(filePath, findingType, button, sourcePath, action) {
                     row.cells[3].innerHTML = '<span class="status-ok">✅</span>';
                 }
                 applyView();
+                fetchResults();
                 showNotice(`Fixed: ${data.message}`, "success");
             } else {
                 button.disabled = false;
@@ -143,6 +144,65 @@ function showNotice(message, type) {
     if (!notice) return;
     notice.textContent = message;
     notice.className = `notice notice-${type}`;
+}
+
+function renderHistory(history) {
+    const historyContent = document.getElementById("historyContent");
+    if (!historyContent) return;
+
+    if (!Array.isArray(history) || history.length === 0) {
+        historyContent.textContent = "No history available.";
+        return;
+    }
+
+    historyContent.textContent = history
+        .slice()
+        .reverse()
+        .map(item => {
+            if (item.type === "fix") {
+                return `${item.timestamp} — FIX: ${item.message || "Fix completed"}`;
+            }
+
+            const wasted = fmtGB(item.wasted_space || 0);
+            const duplicateCount = item.duplicate_count ?? item.duplicates ?? 0;
+            const duration = item.duration_seconds ?? item.duration ?? 0;
+            return `${item.timestamp} — wasted ${wasted}, ${duplicateCount} duplicate group(s), ${duration}s`;
+        })
+        .join("\n");
+}
+
+function clearHistory() {
+    if (!window.confirm("Clear all scan and fix history? Media files will not be changed.")) {
+        return;
+    }
+
+    const button = document.getElementById("clearHistoryBtn");
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Clearing...";
+    }
+
+    fetch("/api/history/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+    })
+        .then(response => response.json().then(data => ({
+            ok: response.ok,
+            data
+        })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                throw new Error(data.error || "Unable to clear history");
+            }
+            window.location.reload();
+        })
+        .catch(error => {
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Clear history";
+            }
+            showNotice(`Failed to clear history: ${error.message}`, "error");
+        });
 }
 
 function buildFindingsCell(findings, filePath) {
@@ -199,20 +259,6 @@ function buildFindingsCell(findings, filePath) {
                 text.textContent += ` +${otherPaths.length - 1}`;
             }
             item.appendChild(text);
-
-            const fixBtn = document.createElement("button");
-            fixBtn.className = "btn-fix";
-            fixBtn.textContent = "Fix";
-            const downloadPath = finding.linked_paths.find(path =>
-                path.split("/").includes("Downloads")
-            );
-            fixBtn.onclick = () => fixFile(
-                filePath,
-                "hardlink",
-                fixBtn,
-                downloadPath
-            );
-            item.appendChild(fixBtn);
         }
 
         container.appendChild(item);
@@ -240,10 +286,15 @@ function buildTable(files) {
         const statusTd = document.createElement("td");
         if (hasFindings) {
             const hasError = findings.some(f => f.severity === "error");
+            const hasWarning = findings.some(f => f.severity === "warning");
             const statusSpan = document.createElement("span");
-            statusSpan.className = hasError ? "status-error" : "status-warning";
+            statusSpan.className = hasError
+                ? "status-error"
+                : hasWarning
+                    ? "status-warning"
+                    : "status-info";
             statusSpan.title = findings.map(f => f.message).join("; ");
-            statusSpan.textContent = hasError ? "🚨" : "⚠️";
+            statusSpan.textContent = hasError ? "🚨" : hasWarning ? "⚠️" : "ℹ️";
             statusTd.appendChild(statusSpan);
         } else {
             const statusSpan = document.createElement("span");
@@ -318,6 +369,7 @@ function renderResults(data) {
     if (data.files) {
         buildTable(data.files);
     }
+    renderHistory(data.history);
 }
 
 function fetchResults() {
@@ -398,6 +450,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const filter = document.getElementById("filter");
     const showAll = document.getElementById("showAll");
+    const clearHistoryButton = document.getElementById("clearHistoryBtn");
+
+    if (clearHistoryButton) {
+        clearHistoryButton.addEventListener("click", clearHistory);
+    }
 
     if (filter) {
         filter.addEventListener("input", () => {

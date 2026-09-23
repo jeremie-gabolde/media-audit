@@ -149,6 +149,30 @@ def api_status():
     return jsonify(scan_status)
 
 
+@app.route("/api/history/clear", methods=["POST"])
+def clear_history():
+    """Clear scan and fix history without modifying media files."""
+    if not scan_lock.acquire(blocking=False):
+        return jsonify({
+            "success": False,
+            "error": "Scan or fix is running; try again when it finishes"
+        }), 409
+
+    try:
+        save_json(HISTORY_FILE, [])
+        results = load_results()
+        if results:
+            results["history"] = []
+            save_json(RESULTS_FILE, results)
+        logger.info("History cleared by authenticated user %r", AUTH_USERNAME)
+        return jsonify({"success": True, "message": "History cleared"})
+    except OSError as e:
+        logger.exception("Failed to clear history")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        scan_lock.release()
+
+
 @app.route("/scan", methods=["POST"])
 def manual_scan():
     if not scan_status["running"]:
