@@ -136,25 +136,6 @@
 
     </div>
 
-    <div class="section">
-
-        <h2>History</h2>
-
-        {% if data.get('history') %}
-
-            <pre>
-{% for item in data['history']|reverse %}
-{{ item.timestamp }} — wasted {{ "%.2f"|format(item.get('wasted_space', 0)/1024/1024/1024) }} GB, {{ item.get('duplicate_count', item.get('duplicates', 0)) }} duplicate group(s), {{ item.get('duration_seconds', item.get('duration', 0)) }}s
-{% endfor %}
-            </pre>
-
-        {% else %}
-
-            <p>No history available.</p>
-
-        {% endif %}
-
-    </div>
 
     <details open>
 
@@ -200,6 +181,31 @@
         </div>
 
     </details>
+
+    
+    <div class="section">
+
+        <h2>History</h2>
+
+        {% if data.get('history') %}
+
+            <pre>
+{% for item in data['history']|reverse %}
+{% if item.get('type') == 'fix' %}
+{{ item.timestamp }} — FIX: {{ item.get('message', 'Fix completed') }}
+{% else %}
+{{ item.timestamp }} — wasted {{ "%.2f"|format(item.get('wasted_space', 0)/1024/1024/1024) }} GB, {{ item.get('duplicate_count', item.get('duplicates', 0)) }} duplicate group(s), {{ item.get('duration_seconds', item.get('duration', 0)) }}s
+{% endif %}
+{% endfor %}
+            </pre>
+
+        {% else %}
+
+            <p>No history available.</p>
+
+        {% endif %}
+
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 

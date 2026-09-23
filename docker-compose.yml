@@ -10,8 +10,10 @@ services:
       SCAN_ROOTS: /media/Downloads,/media/Movies,/media/Series
       SCAN_INTERVAL_DAYS: 7
       DOWNLOADS_DIR: /media/Downloads
-      MEDIA_AUDIT_USERNAME: ${MEDIA_AUDIT_USERNAME:?Set MEDIA_AUDIT_USERNAME in .env}
-      MEDIA_AUDIT_PASSWORD: ${MEDIA_AUDIT_PASSWORD:?Set MEDIA_AUDIT_PASSWORD in .env}
+      # Replace these placeholders before deployment. Do not commit real credentials.
+      # Quote these values so YAML special characters are preserved.
+      MEDIA_AUDIT_USERNAME: "change-this-username"
+      MEDIA_AUDIT_PASSWORD: "change-this-password"
     
     volumes:
       # Hardlink replacement requires read-write access to all media directories.

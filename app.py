@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 AUTH_USERNAME = os.environ.get("MEDIA_AUDIT_USERNAME", "")
 AUTH_PASSWORD = os.environ.get("MEDIA_AUDIT_PASSWORD", "")
 
+if AUTH_USERNAME and AUTH_PASSWORD:
+    logger.info("HTTP authentication enabled for user %r", AUTH_USERNAME)
+else:
+    logger.error("MEDIA_AUDIT_USERNAME and MEDIA_AUDIT_PASSWORD must be configured")
+
 
 def authentication_required():
     response = jsonify({"success": False, "error": "Authentication required"})
@@ -30,19 +35,22 @@ def authentication_required():
 @app.before_request
 def require_authentication():
     if not AUTH_USERNAME or not AUTH_PASSWORD:
-        logger.error("MEDIA_AUDIT_USERNAME and MEDIA_AUDIT_PASSWORD must be configured")
         return jsonify({"success": False, "error": "Authentication is not configured"}), 503
 
     credentials = request.authorization
     if not credentials:
         return authentication_required()
     if not hmac.compare_digest(credentials.username, AUTH_USERNAME):
+        logger.warning("Rejected authentication for username %r", credentials.username)
         return authentication_required()
     if not hmac.compare_digest(credentials.password, AUTH_PASSWORD):
+        logger.warning("Rejected authentication for username %r", credentials.username)
         return authentication_required()
 
 DATA_DIR = "data"
 RESULTS_FILE = os.path.join(DATA_DIR, "results.json")
+HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
+HISTORY_LIMIT = 30
 
 SCAN_INTERVAL_DAYS = int(os.environ.get("SCAN_INTERVAL_DAYS", "7"))
 
@@ -92,6 +100,38 @@ def load_results():
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def save_json(path, data):
+    """Write JSON atomically so readers never see a partial file."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    temporary_path = f"{path}.tmp"
+    with open(temporary_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(temporary_path, path)
+
+
+def record_fix(file_path, finding_type, source_path, action, result):
+    """Append a successful fix action to the persistent history."""
+    history = scanner.load_json(HISTORY_FILE, [])
+    if not isinstance(history, list):
+        history = []
+    history.append({
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "type": "fix",
+        "action": action,
+        "finding_type": finding_type,
+        "file_path": file_path,
+        "source_path": source_path,
+        "message": result.get("message", "Fix completed")
+    })
+    history = history[-HISTORY_LIMIT:]
+    save_json(HISTORY_FILE, history)
+
+    results = load_results()
+    if results:
+        results["history"] = history
+        save_json(RESULTS_FILE, results)
 
 
 @app.route("/")
@@ -150,11 +190,16 @@ def api_fix():
             return jsonify({"success": False, "error": "Invalid action"}), 400
         if source_path is not None and not isinstance(source_path, str):
             return jsonify({"success": False, "error": "Missing parameters"}), 400
-        if scan_status["running"]:
+        if not scan_lock.acquire(blocking=False):
             return jsonify({"success": False, "error": "Scan is running; try again when it finishes"}), 409
 
-        result = fixer.fix_file(file_path, finding_type, source_path, action)
-        return jsonify(result)
+        try:
+            result = fixer.fix_file(file_path, finding_type, source_path, action)
+            if result.get("success"):
+                record_fix(file_path, finding_type, source_path, action, result)
+            return jsonify(result)
+        finally:
+            scan_lock.release()
 
     except Exception as e:
         logger.exception(

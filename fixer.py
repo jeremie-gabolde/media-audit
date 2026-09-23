@@ -73,12 +73,12 @@ def remove_download(file_path):
     if not is_in_downloads(path):
         return False, "Source path is not inside Downloads"
     if not path.exists():
-        return True, "Downloads file was already removed"
+        return True, f"Downloads file was already removed: {path}"
     if not path.is_file():
         return False, "Downloads source is not a regular file"
     path.unlink()
     logger.info(f"Removed Downloads file: {path}")
-    return True, "Removed duplicate file from Downloads"
+    return True, f"Removed duplicate file from Downloads: {path}"
 
 
 def fix_duplicate(file_path, source_path=None, action="hardlink"):
@@ -119,7 +119,10 @@ def fix_duplicate(file_path, source_path=None, action="hardlink"):
                 "Replaced library file with hardlink to Downloads"
             )
             results["success"] = True
-            results["message"] = "Replaced library file with Downloads hardlink"
+            results["message"] = (
+                f"Replaced library file with Downloads hardlink: "
+                f"{file_path} <- {source_path}"
+            )
             return results
 
         results["message"] = "No matching file found in Downloads"

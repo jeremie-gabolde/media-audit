@@ -19,6 +19,34 @@ Media Audit scans a Downloads, Movies, and Series library for duplicate video fi
 - Read/write access to the media directories.
 - The host path mounted into the container as one common parent directory.
 
+## Authentication
+
+The web interface and all API endpoints require HTTP Basic Authentication. Set
+the credentials directly in `docker-compose.yml`, keeping the values quoted:
+
+```yaml
+MEDIA_AUDIT_USERNAME: "your-username"
+MEDIA_AUDIT_PASSWORD: "your-password"
+```
+
+After changing them, recreate the container:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+If the browser repeatedly asks for credentials, verify the values that Compose
+will pass to the container:
+
+```bash
+docker compose config
+docker logs media-audit | grep -E 'authentication|Rejected'
+```
+
+Use a private browser window or clear the saved HTTP Basic Authentication
+credentials after changing the username or password. Never commit real
+credentials to a public repository.
+
 Hardlinks cannot cross filesystem boundaries. The included Compose configuration mounts `/volume1/Media` as `/media`, so the application sees:
 
 ```text
@@ -35,12 +63,7 @@ Build and start the application:
 docker compose up -d --build
 ```
 
-Create a local `.env` file before starting the container. It is ignored by Git:
-
-```dotenv
-MEDIA_AUDIT_USERNAME=your-username
-MEDIA_AUDIT_PASSWORD=use-a-long-unique-password
-```
+Before starting the container, replace the placeholder values for `MEDIA_AUDIT_USERNAME` and `MEDIA_AUDIT_PASSWORD` directly in `docker-compose.yml`. Use a long, unique password and do not commit real credentials to a public repository.
 
 Open the web interface at:
 
