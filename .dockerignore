@@ -1,0 +1,10 @@
+media/
+data/
+__pycache__/
+*.py[cod]
+*.tar
+*.zip
+.git/
+.gitignore
+.vscode/
+.DS_Store

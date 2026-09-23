@@ -1,0 +1,10 @@
+__pycache__/*
+data/cache.json
+data/results.json
+data/history.json
+media/*
+*.tar
+*.zip
+.vscode/
+.env
+.env.*
