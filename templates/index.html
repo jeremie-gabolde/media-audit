@@ -17,10 +17,6 @@
 
         <h1>Media Audit</h1>
 
-        <form action="/scan" method="post">
-            <button type="submit" id="scanBtn">Run Scan</button>
-        </form>
-
     </div>
 
     <div id="notice" class="notice" role="status" aria-live="polite"></div>
@@ -39,17 +35,27 @@
 
         <h2>Scan Status</h2>
 
-        <div id="scanPhase">Idle</div>
+        <div class="scan-status-row">
+            <form action="/scan" method="post">
+                <button type="submit" id="scanBtn">Run Scan</button>
+            </form>
 
-        <div class="progress-container">
-            <div
-                id="progressBar"
-                class="progress-bar">
+            <div class="scan-progress">
+                <div id="scanPhase">Idle</div>
+
+                <div class="progress-line">
+                    <div class="progress-container">
+                        <div
+                            id="progressBar"
+                            class="progress-bar">
+                        </div>
+                    </div>
+
+                    <div id="progressText">
+                        0 / 0
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <div id="progressText">
-            0 / 0
         </div>
 
     </div>
@@ -193,16 +199,16 @@
         <pre id="historyContent">{% if data.get('history') %}
 {% for item in data['history']|reverse %}
 {% if item.get('type') == 'fix' %}
-{{ item.timestamp }} — FIX: {{ item.get('message', 'Fix completed') }}
+{{ item.timestamp|replace('T', ' ') }} — FIX: {{ item.get('message', 'Fix completed') }}
 {% else %}
-{{ item.timestamp }} — wasted {{ "%.2f"|format(item.get('wasted_space', 0)/1024/1024/1024) }} GB, {{ item.get('duplicate_count', item.get('duplicates', 0)) }} duplicate group(s), {{ item.get('duration_seconds', item.get('duration', 0)) }}s
+{{ item.timestamp|replace('T', ' ') }} — wasted {{ "%.2f"|format(item.get('wasted_space', 0)/1024/1024/1024) }} GB, {{ item.get('duplicate_count', item.get('duplicates', 0)) }} duplicate group(s), {{ item.get('duration_seconds', item.get('duration', 0)) }}s
 {% endif %}
 {% endfor %}
 {% else %}No history available.{% endif %}</pre>
 
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='2') }}"></script>
 
 </body>
 </html>

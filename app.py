@@ -134,6 +134,64 @@ def record_fix(file_path, finding_type, source_path, action, result):
         save_json(RESULTS_FILE, results)
 
 
+def update_results_after_fix(file_path, finding_type, source_path, action):
+    """Keep persisted scan results consistent until the next full scan."""
+    results = load_results()
+    if not results or not isinstance(results.get("files"), list):
+        return
+
+    files = results["files"]
+    target = next((item for item in files if item.get("path") == file_path), None)
+
+    if finding_type == "duplicate":
+        if target is None:
+            return
+        results["wasted_space"] = max(
+            0, results.get("wasted_space", 0) - target.get("size", 0)
+        )
+        results["duplicate_count"] = max(
+            0, results.get("duplicate_count", 0) - 1
+        )
+        target["findings"] = [
+            finding for finding in target.get("findings", [])
+            if finding.get("type") != "duplicate"
+        ]
+        if action == "remove_download" and source_path:
+            files[:] = [item for item in files if item.get("path") != source_path]
+
+    elif finding_type == "hardlink" and action == "migrate" and target:
+        files[:] = [item for item in files if item.get("path") != source_path]
+        remaining_paths = [item.get("path") for item in files]
+        linked_records = [
+            item for item in files
+            if source_path in item.get("linked_paths", [])
+            or file_path in item.get("linked_paths", [])
+        ]
+        linked_records = [
+            item for item in linked_records if item.get("path") in remaining_paths
+        ]
+        linked_paths = [item.get("path") for item in linked_records]
+
+        if len(linked_paths) < 2:
+            results["hardlink_count"] = max(
+                0, results.get("hardlink_count", 0) - 1
+            )
+
+        for item in linked_records:
+            item["linked_paths"] = linked_paths
+            if len(linked_paths) < 2:
+                item["findings"] = [
+                    finding for finding in item.get("findings", [])
+                    if finding.get("type") != "hardlink"
+                ]
+            else:
+                for finding in item.get("findings", []):
+                    if finding.get("type") == "hardlink":
+                        finding["linked_paths"] = linked_paths
+
+    save_json(RESULTS_FILE, results)
+
+
 @app.route("/")
 def index():
     return render_template("index.html", data=load_results())
@@ -210,8 +268,10 @@ def api_fix():
             return jsonify({"success": False, "error": "file_path must be a string"}), 400
         if finding_type not in {"duplicate", "hardlink"}:
             return jsonify({"success": False, "error": "Invalid finding_type"}), 400
-        if action not in {"hardlink", "remove_download"}:
+        if action not in {"hardlink", "remove_download", "migrate"}:
             return jsonify({"success": False, "error": "Invalid action"}), 400
+        if action == "migrate" and finding_type != "hardlink":
+            return jsonify({"success": False, "error": "Migrate is only valid for hardlinks"}), 400
         if source_path is not None and not isinstance(source_path, str):
             return jsonify({"success": False, "error": "Missing parameters"}), 400
         if not scan_lock.acquire(blocking=False):
@@ -220,6 +280,7 @@ def api_fix():
         try:
             result = fixer.fix_file(file_path, finding_type, source_path, action)
             if result.get("success"):
+                update_results_after_fix(file_path, finding_type, source_path, action)
                 record_fix(file_path, finding_type, source_path, action, result)
             return jsonify(result)
         finally:

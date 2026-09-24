@@ -13,6 +13,20 @@ function fmtGB(bytes) {
     return (Number(bytes || 0) / 1024 / 1024 / 1024).toFixed(1) + " GB";
 }
 
+function formatTimestamp(timestamp) {
+    if (!timestamp) return "";
+
+    const value = String(timestamp);
+    const date = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)
+        ? value
+        : `${value}Z`);
+    if (Number.isNaN(date.getTime())) return value.replace("T", " ");
+
+    const pad = number => String(number).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+        + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 function applyView() {
     const rows = Array.from(document.querySelectorAll("#fileTable tbody tr"));
     const filterVal = (document.getElementById("filter")?.value || "").toLowerCase();
@@ -75,7 +89,54 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     };
 }
 
-function submitFix(filePath, findingType, button, sourcePath, action) {
+function updateMetricsAfterFix(row, findingType, action, linkedPathCount) {
+    const fileSize = Number(row?.dataset.fileSize || 0);
+    const wastedSpace = document.getElementById("wastedSpace");
+    const duplicateCount = document.getElementById("duplicateCount");
+    const hardlinkCount = document.getElementById("hardlinkCount");
+
+    if (findingType === "duplicate") {
+        const currentWasted = Number(wastedSpace?.dataset.bytes || 0);
+        if (wastedSpace) {
+            const updatedWasted = Math.max(0, currentWasted - fileSize);
+            wastedSpace.dataset.bytes = updatedWasted;
+            wastedSpace.textContent = fmtGB(updatedWasted);
+            updateStorageDisplay(updatedWasted);
+        }
+        if (duplicateCount) {
+            duplicateCount.textContent = Math.max(
+                0,
+                Number(duplicateCount.textContent || 0) - 1
+            );
+        }
+    }
+
+    if (findingType === "hardlink" && action === "migrate"
+        && linkedPathCount === 2 && hardlinkCount) {
+        hardlinkCount.textContent = Math.max(
+            0,
+            Number(hardlinkCount.textContent || 0) - 1
+        );
+    }
+}
+
+function updateStorageDisplay(wasted) {
+    const totalSpace = Number(document.getElementById("totalSpace")?.dataset.bytes || 0);
+    const used = Math.max(0, totalSpace - wasted);
+    const usedBar = document.getElementById("usedBar");
+    const wastedBar = document.getElementById("wastedBar");
+    const storageText = document.getElementById("storageText");
+
+    if (totalSpace > 0) {
+        if (usedBar) usedBar.style.width = `${used * 100 / totalSpace}%`;
+        if (wastedBar) wastedBar.style.width = `${wasted * 100 / totalSpace}%`;
+        if (storageText) {
+            storageText.textContent = `Used: ${fmtGB(used)} | Wasted: ${fmtGB(wasted)}`;
+        }
+    }
+}
+
+function submitFix(filePath, findingType, button, sourcePath, action, linkedPathCount = 0) {
     button.disabled = true;
     button.textContent = "Fixing...";
 
@@ -103,6 +164,7 @@ function submitFix(filePath, findingType, button, sourcePath, action) {
                 button.className = "btn-fix btn-fix-success";
                 const findingItem = button.closest(".finding-item");
                 const row = button.closest("tr");
+                updateMetricsAfterFix(row, findingType, action, linkedPathCount);
                 if (findingItem) findingItem.remove();
                 if (row && !row.querySelector(".finding-item")) {
                     row.dataset.hasFindings = "0";
@@ -110,8 +172,8 @@ function submitFix(filePath, findingType, button, sourcePath, action) {
                     row.cells[3].innerHTML = '<span class="status-ok">✅</span>';
                 }
                 applyView();
-                fetchResults();
                 showNotice(`Fixed: ${data.message}`, "success");
+                fetchResults(false);
             } else {
                 button.disabled = false;
                 button.textContent = "Retry";
@@ -160,15 +222,74 @@ function renderHistory(history) {
         .reverse()
         .map(item => {
             if (item.type === "fix") {
-                return `${item.timestamp} — FIX: ${item.message || "Fix completed"}`;
+                return `${formatTimestamp(item.timestamp)} — FIX: ${item.message || "Fix completed"}`;
             }
 
             const wasted = fmtGB(item.wasted_space || 0);
             const duplicateCount = item.duplicate_count ?? item.duplicates ?? 0;
             const duration = item.duration_seconds ?? item.duration ?? 0;
-            return `${item.timestamp} — wasted ${wasted}, ${duplicateCount} duplicate group(s), ${duration}s`;
+            return `${formatTimestamp(item.timestamp)} — wasted ${wasted}, ${duplicateCount} duplicate group(s), ${duration}s`;
         })
         .join("\n");
+}
+
+function appendPathPart(container, path, differenceStart, differenceEnd) {
+    if (differenceStart === differenceEnd) {
+        container.appendChild(document.createTextNode(path));
+        return;
+    }
+
+    container.appendChild(document.createTextNode(path.slice(0, differenceStart)));
+    const difference = document.createElement("mark");
+    difference.className = "path-difference";
+    difference.textContent = path.slice(differenceStart, differenceEnd);
+    container.appendChild(difference);
+    container.appendChild(document.createTextNode(path.slice(differenceEnd)));
+}
+
+function appendPathComparison(
+    container,
+    currentPath,
+    linkedPath,
+    currentLabel = "This path: ",
+    linkedLabel = "Linked path: "
+) {
+    let prefixLength = 0;
+    while (prefixLength < currentPath.length
+        && prefixLength < linkedPath.length
+        && currentPath[prefixLength] === linkedPath[prefixLength]) {
+        prefixLength += 1;
+    }
+
+    let suffixLength = 0;
+    while (suffixLength < currentPath.length - prefixLength
+        && suffixLength < linkedPath.length - prefixLength
+        && currentPath[currentPath.length - suffixLength - 1]
+            === linkedPath[linkedPath.length - suffixLength - 1]) {
+        suffixLength += 1;
+    }
+
+    const currentLine = document.createElement("div");
+    currentLine.className = "hardlink-path current-path";
+    currentLine.appendChild(document.createTextNode(currentLabel));
+    appendPathPart(
+        currentLine,
+        currentPath,
+        prefixLength,
+        currentPath.length - suffixLength
+    );
+    container.appendChild(currentLine);
+
+    const linkedLine = document.createElement("div");
+    linkedLine.className = "hardlink-path linked-path";
+    linkedLine.appendChild(document.createTextNode(linkedLabel));
+    appendPathPart(
+        linkedLine,
+        linkedPath,
+        prefixLength,
+        linkedPath.length - suffixLength
+    );
+    container.appendChild(linkedLine);
 }
 
 function clearHistory() {
@@ -230,10 +351,17 @@ function buildFindingsCell(findings, filePath) {
             span.textContent = "🚨";
             item.appendChild(span);
 
-            const text = document.createElement("span");
-            text.className = "finding-text";
-            text.textContent = ` Duplicate: ${finding.matched_path}`;
-            item.appendChild(text);
+            const paths = document.createElement("div");
+            paths.className = "finding-text hardlink-paths duplicate-paths";
+            paths.title = finding.matched_path;
+            appendPathComparison(
+                paths,
+                filePath,
+                finding.matched_path,
+                "This path: ",
+                "Duplicate path: "
+            );
+            item.appendChild(paths);
 
             const fixBtn = document.createElement("button");
             fixBtn.className = "btn-fix";
@@ -250,15 +378,38 @@ function buildFindingsCell(findings, filePath) {
             span.textContent = "🔗";
             item.appendChild(span);
 
-            const text = document.createElement("span");
-            text.className = "finding-text";
             const otherPaths = finding.linked_paths.filter(p => p !== filePath);
-            text.title = otherPaths.join("\n");
-            text.textContent = ` Hardlinked (${finding.linked_paths.length}): ${otherPaths.slice(0, 1).join(", ")}`;
-            if (otherPaths.length > 1) {
-                text.textContent += ` +${otherPaths.length - 1}`;
+            const paths = document.createElement("div");
+            paths.className = "finding-text hardlink-paths";
+            paths.title = otherPaths.join("\n");
+            if (otherPaths.length > 0) {
+                appendPathComparison(paths, filePath, otherPaths[0]);
             }
-            item.appendChild(text);
+            if (otherPaths.length > 1) {
+                const count = document.createElement("div");
+                count.textContent = ` +${otherPaths.length - 1} more linked path(s)`;
+                paths.appendChild(count);
+            }
+            item.appendChild(paths);
+
+            const isLibraryPath = filePath.split("/").some(
+                pathPart => pathPart === "Movies" || pathPart === "Series"
+            );
+            if (isLibraryPath && otherPaths.length > 0) {
+                const migrateBtn = document.createElement("button");
+                migrateBtn.className = "btn-fix";
+                migrateBtn.textContent = "Migrate";
+                migrateBtn.title = "Move the real file here and remove this hardlink";
+                migrateBtn.onclick = () => submitFix(
+                    filePath,
+                    "hardlink",
+                    migrateBtn,
+                    otherPaths[0],
+                    "migrate",
+                    finding.linked_paths.length
+                );
+                item.appendChild(migrateBtn);
+            }
         }
 
         container.appendChild(item);
@@ -282,6 +433,7 @@ function buildTable(files) {
 
         const tr = document.createElement("tr");
         tr.dataset.hasFindings = hasFindings ? "1" : "0";
+        tr.dataset.fileSize = file.size || 0;
 
         const statusTd = document.createElement("td");
         if (hasFindings) {
@@ -343,8 +495,14 @@ function renderResults(data) {
     const duplicateCount = document.getElementById("duplicateCount");
     const hardlinkCount = document.getElementById("hardlinkCount");
 
-    if (totalSpace) totalSpace.textContent = fmtGB(data.total_space);
-    if (wastedSpace) wastedSpace.textContent = fmtGB(data.wasted_space);
+    if (totalSpace) {
+        totalSpace.dataset.bytes = data.total_space || 0;
+        totalSpace.textContent = fmtGB(data.total_space);
+    }
+    if (wastedSpace) {
+        wastedSpace.dataset.bytes = data.wasted_space || 0;
+        wastedSpace.textContent = fmtGB(data.wasted_space);
+    }
     if (duplicateCount) duplicateCount.textContent = data.duplicate_count || 0;
     if (hardlinkCount) hardlinkCount.textContent = data.hardlink_count || 0;
 
@@ -372,12 +530,16 @@ function renderResults(data) {
     renderHistory(data.history);
 }
 
-function fetchResults() {
+function fetchResults(updateDashboard = true) {
     fetch("/api/results")
         .then(r => r.json())
         .then(data => {
             if (data && Object.keys(data).length) {
-                renderResults(data);
+                if (updateDashboard) {
+                    renderResults(data);
+                } else {
+                    renderHistory(data.history);
+                }
             }
         })
         .catch(() => {});
@@ -393,7 +555,10 @@ function updateStatus() {
             const scanBtn = document.getElementById("scanBtn");
 
             if (phase) phase.textContent = data.phase || "Idle";
-            if (scanBtn) scanBtn.disabled = !!data.running;
+            if (scanBtn) {
+                scanBtn.disabled = !!data.running;
+                if (!data.running) scanBtn.textContent = "Run Scan";
+            }
 
             if (data.total > 0) {
                 const percent = (data.current / data.total) * 100;
@@ -451,6 +616,33 @@ document.addEventListener("DOMContentLoaded", () => {
     const filter = document.getElementById("filter");
     const showAll = document.getElementById("showAll");
     const clearHistoryButton = document.getElementById("clearHistoryBtn");
+    const scanForm = document.querySelector('form[action="/scan"]');
+    const scanButton = document.getElementById("scanBtn");
+
+    if (scanForm) {
+        scanForm.addEventListener("submit", event => {
+            event.preventDefault();
+            if (scanButton) {
+                scanButton.disabled = true;
+                scanButton.textContent = "Starting scan...";
+            }
+            const phase = document.getElementById("scanPhase");
+            if (phase) phase.textContent = "Starting scan...";
+
+            fetch("/scan", { method: "POST" })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    updateStatus();
+                })
+                .catch(error => {
+                    if (scanButton) {
+                        scanButton.disabled = false;
+                        scanButton.textContent = "Run Scan";
+                    }
+                    showNotice(`Unable to start scan: ${error.message}`, "error");
+                });
+        });
+    }
 
     if (clearHistoryButton) {
         clearHistoryButton.addEventListener("click", clearHistory);

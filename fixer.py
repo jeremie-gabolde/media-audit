@@ -64,6 +64,38 @@ def replace_with_download_hardlink(file_path, source_path=None):
         raise Exception(f"Failed to replace file with hardlink: {e}")
 
 
+def migrate_hardlink(file_path, source_path=None):
+    """Move the real file to a hardlink's path, leaving one link behind."""
+    target = Path(file_path).resolve()
+    source = Path(source_path).resolve() if source_path else None
+
+    if not is_in_media_library(target):
+        return False, "Hardlink destination is not in Movies or Series"
+    if source is None or source == target:
+        return False, "A different hardlink source path is required"
+    if not source.is_file() or not target.is_file():
+        return False, "Hardlink source and destination must be regular files"
+
+    try:
+        source_stat = source.stat()
+        target_stat = target.stat()
+    except OSError as e:
+        return False, f"Unable to inspect hardlink: {e}"
+
+    if (source_stat.st_dev, source_stat.st_ino) != (
+        target_stat.st_dev,
+        target_stat.st_ino,
+    ):
+        return False, "Source and destination are not hardlinks to the same file"
+
+    try:
+        source.unlink()
+        logger.info(f"Migrated {source} to {target}")
+        return True, f"Migrated real file to hardlink path: {target}"
+    except OSError as e:
+        raise Exception(f"Failed to migrate hardlink: {e}")
+
+
 def remove_download(file_path):
     """Remove a file only when it is inside Downloads."""
     if not file_path:
@@ -136,6 +168,13 @@ def fix_duplicate(file_path, source_path=None, action="hardlink"):
 
 def fix_hardlink(file_path, source_path=None, action="hardlink"):
     """Replace a Movies/Series file with its Downloads hardlink."""
+    if action == "migrate":
+        migrated, message = migrate_hardlink(file_path, source_path)
+        return {
+            "success": migrated,
+            "message": message,
+            "actions_taken": [message] if migrated else []
+        }
     return fix_duplicate(file_path, source_path, action)
 
 

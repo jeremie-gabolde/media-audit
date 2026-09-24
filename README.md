@@ -12,6 +12,19 @@ Media Audit scans a Downloads, Movies, and Series library for duplicate video fi
 - Runs periodic background scans.
 - Stores scan results, history, and hash cache as JSON.
 
+This tool is especially useful when a Docker Compose configuration appears to
+put Downloads, Movies, and Series under the same media tree, but actually
+mounts them from separate host paths or filesystems. Hardlinks require the
+source and destination to be on the same filesystem device; separate bind
+mounts can violate that requirement even when the paths look related inside
+the container. Media Audit is intended to repair the data after this mistake
+has occurred: it helps identify existing hardlink and duplicate issues and
+provides fixes where the filesystem layout permits them. It does not replace
+correct container configuration. Fix the Docker Compose mounts first so
+Downloads, Movies, and Series are exposed from one common host filesystem;
+otherwise Sonarr, Radarr, and similar services will not be able to create
+hardlinks reliably in the future.
+
 ## Requirements
 
 - Docker Engine with Docker Compose.
@@ -21,30 +34,14 @@ Media Audit scans a Downloads, Movies, and Series library for duplicate video fi
 
 ## Authentication
 
-The web interface and all API endpoints require HTTP Basic Authentication. Set
-the credentials directly in `docker-compose.yml`, keeping the values quoted:
+Set these quoted values in `docker-compose.yml`:
 
 ```yaml
 MEDIA_AUDIT_USERNAME: "your-username"
 MEDIA_AUDIT_PASSWORD: "your-password"
 ```
 
-After changing them, recreate the container:
-
-```bash
-docker compose up -d --build --force-recreate
-```
-
-If the browser repeatedly asks for credentials, verify the values that Compose
-will pass to the container:
-
-```bash
-docker compose config
-docker logs media-audit | grep -E 'authentication|Rejected'
-```
-
-Use a private browser window or clear the saved HTTP Basic Authentication
-credentials after changing the username or password. Never commit real
+The web page and API require HTTP Basic Authentication. Never commit real
 credentials to a public repository.
 
 Hardlinks cannot cross filesystem boundaries. The included Compose configuration mounts `/volume1/Media` as `/media`, so the application sees:
@@ -63,15 +60,11 @@ Build and start the application:
 docker compose up -d --build
 ```
 
-Before starting the container, replace the placeholder values for `MEDIA_AUDIT_USERNAME` and `MEDIA_AUDIT_PASSWORD` directly in `docker-compose.yml`. Use a long, unique password and do not commit real credentials to a public repository.
-
 Open the web interface at:
 
 ```text
 http://NAS-IP:8080
 ```
-
-The web page, API, and static assets require these credentials through HTTP Basic Authentication. Your browser will prompt for them when opening the page.
 
 The default Compose configuration uses `${MEDIA_ROOT:-/volume1/Media}` and expects this host layout:
 
@@ -114,9 +107,11 @@ The device numbers must match for hardlinks to work.
 4. Choose one of the available actions:
    - **Replace with Downloads hardlink** keeps the library filename while sharing the same file data.
    - **Remove Downloads file** deletes the selected source from Downloads.
+  - **Migrate** moves the real file to the hardlink's path with the same filename and removes the other hardlink path.
 5. Run another scan after large batches of changes to refresh all counts.
 
 The removal action is restricted to paths inside `/media/Downloads`. Hardlink replacement is restricted to `/media/Movies` and `/media/Series`.
+Migration is restricted to hardlinks in `/media/Movies` and `/media/Series` and requires both paths to share the same inode.
 
 ## Configuration
 
@@ -189,6 +184,6 @@ Runtime scan data is stored in `data/` and is excluded from Docker build context
 
 ## Security
 
-The web interface uses HTTP Basic Authentication configured through `MEDIA_AUDIT_USERNAME` and `MEDIA_AUDIT_PASSWORD`. Do not expose port `8080` directly to the public internet because Basic Authentication is not encrypted without HTTPS. Restrict access with a firewall, reverse proxy HTTPS, or a private network/VPN.
+Do not expose port `8080` directly to the public internet without HTTPS.
 
 The application has read/write access to the mounted media directory because hardlink replacement and Downloads removal are destructive filesystem operations. Use a dedicated container and least-privilege filesystem permissions where possible.
