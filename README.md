@@ -107,6 +107,8 @@ The device numbers must match for hardlinks to work.
 4. Choose one of the available actions:
    - **Replace with Downloads hardlink** keeps the library filename while sharing the same file data.
    - **Remove Downloads file** deletes the selected source from Downloads.
+   - For duplicates where both files are already in Movies or Series, choose
+     which library file to delete. Hardlink creation is not offered for this case.
   - **Migrate** moves the real file to the hardlink's path with the same filename and removes the other hardlink path.
 5. Run another scan after large batches of changes to refresh all counts.
 

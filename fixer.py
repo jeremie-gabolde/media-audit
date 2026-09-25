@@ -113,6 +113,25 @@ def remove_download(file_path):
     return True, f"Removed duplicate file from Downloads: {path}"
 
 
+def remove_library_duplicate(file_path, source_path=None):
+    """Remove the selected file from Movies or Series after a duplicate choice."""
+    if not file_path:
+        return False, "No library file path was provided"
+
+    path = Path(file_path).resolve()
+    source = Path(source_path).resolve() if source_path else None
+    if not is_in_media_library(path):
+        return False, "Selected file is not inside Movies or Series"
+    if source is None or source == path or not is_in_media_library(source):
+        return False, "A different duplicate file in Movies or Series is required"
+    if not path.is_file() or not source.is_file():
+        return False, "Selected duplicate files must be regular files"
+
+    path.unlink()
+    logger.info(f"Removed library duplicate: {path} (matched {source})")
+    return True, f"Removed duplicate file from Movies or Series: {path}"
+
+
 def fix_duplicate(file_path, source_path=None, action="hardlink"):
     """
     Replace a Movies/Series file with a hardlink to its Downloads counterpart.
@@ -132,6 +151,16 @@ def fix_duplicate(file_path, source_path=None, action="hardlink"):
                 results["actions_taken"].append(
                     message
                 )
+                results["success"] = True
+                results["message"] = message
+                return results
+            results["message"] = message
+            return results
+
+        if action == "remove_library_duplicate":
+            removed, message = remove_library_duplicate(file_path, source_path)
+            if removed:
+                results["actions_taken"].append(message)
                 results["success"] = True
                 results["message"] = message
                 return results

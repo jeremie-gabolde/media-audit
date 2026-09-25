@@ -65,8 +65,11 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     const description = document.getElementById("fixDialogDescription");
     const hardlinkButton = document.getElementById("chooseHardlink");
     const removeButton = document.getElementById("chooseRemoveDownload");
+    const deleteCurrentButton = document.getElementById("chooseDeleteCurrent");
+    const deleteMatchedButton = document.getElementById("chooseDeleteMatched");
 
-    if (!dialog || !description || !hardlinkButton || !removeButton) {
+    if (!dialog || !description || !hardlinkButton || !removeButton
+        || !deleteCurrentButton || !deleteMatchedButton) {
         submitFix(filePath, findingType, button, sourcePath, "hardlink");
         return;
     }
@@ -74,8 +77,17 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     description.textContent = `Choose how to fix ${filePath}`;
     const hasDownloadsSource = typeof sourcePath === "string"
         && sourcePath.split("/").includes("Downloads");
+    const hasLibrarySource = typeof sourcePath === "string"
+        && !hasDownloadsSource
+        && (sourcePath.split("/").includes("Movies")
+            || sourcePath.split("/").includes("Series"));
+    const isDuplicate = findingType === "duplicate";
     hardlinkButton.disabled = !hasDownloadsSource;
     removeButton.disabled = !hasDownloadsSource;
+    hardlinkButton.hidden = !hasDownloadsSource;
+    removeButton.hidden = !hasDownloadsSource;
+    deleteCurrentButton.hidden = !(isDuplicate && hasLibrarySource);
+    deleteMatchedButton.hidden = !(isDuplicate && hasLibrarySource);
     dialog.showModal();
 
     const closeDialog = () => dialog.close();
@@ -86,6 +98,26 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     removeButton.onclick = () => {
         closeDialog();
         submitFix(filePath, findingType, button, sourcePath, "remove_download");
+    };
+    deleteCurrentButton.onclick = () => {
+        closeDialog();
+        submitFix(
+            filePath,
+            findingType,
+            button,
+            sourcePath,
+            "remove_library_duplicate"
+        );
+    };
+    deleteMatchedButton.onclick = () => {
+        closeDialog();
+        submitFix(
+            sourcePath,
+            findingType,
+            button,
+            filePath,
+            "remove_library_duplicate"
+        );
     };
 }
 

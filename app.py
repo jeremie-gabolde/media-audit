@@ -144,6 +144,20 @@ def update_results_after_fix(file_path, finding_type, source_path, action):
     target = next((item for item in files if item.get("path") == file_path), None)
 
     if finding_type == "duplicate":
+        if action == "remove_library_duplicate" and source_path:
+            files[:] = [item for item in files if item.get("path") != file_path]
+            for item in files:
+                item["findings"] = [
+                    finding for finding in item.get("findings", [])
+                    if not (
+                        finding.get("type") == "duplicate"
+                        and finding.get("matched_path") == file_path
+                    )
+                ]
+            target = next(
+                (item for item in files if item.get("path") == source_path),
+                target,
+            )
         if target is None:
             return
         results["wasted_space"] = max(
@@ -268,10 +282,17 @@ def api_fix():
             return jsonify({"success": False, "error": "file_path must be a string"}), 400
         if finding_type not in {"duplicate", "hardlink"}:
             return jsonify({"success": False, "error": "Invalid finding_type"}), 400
-        if action not in {"hardlink", "remove_download", "migrate"}:
+        if action not in {
+            "hardlink", "remove_download", "remove_library_duplicate", "migrate"
+        }:
             return jsonify({"success": False, "error": "Invalid action"}), 400
         if action == "migrate" and finding_type != "hardlink":
             return jsonify({"success": False, "error": "Migrate is only valid for hardlinks"}), 400
+        if action == "remove_library_duplicate" and finding_type != "duplicate":
+            return jsonify({
+                "success": False,
+                "error": "Library duplicate removal is only valid for duplicates"
+            }), 400
         if source_path is not None and not isinstance(source_path, str):
             return jsonify({"success": False, "error": "Missing parameters"}), 400
         if not scan_lock.acquire(blocking=False):
