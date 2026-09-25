@@ -5,6 +5,7 @@ data/history.json
 media/*
 *.tar
 *.zip
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .env
 .env.*

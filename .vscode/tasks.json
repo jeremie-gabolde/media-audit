@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Docker: Build and save media-audit",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "if ! systemctl is-active --quiet docker; then echo 'Docker service is inactive; starting it...'; sudo systemctl start docker || exit $?; fi; docker info >/dev/null || { echo 'Docker daemon is still unavailable.' >&2; exit 1; }; docker compose build media-audit && docker save -o media-audit.tar media-audit:latest"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
