@@ -65,16 +65,14 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     const description = document.getElementById("fixDialogDescription");
     const hardlinkButton = document.getElementById("chooseHardlink");
     const removeButton = document.getElementById("chooseRemoveDownload");
-    const deleteCurrentButton = document.getElementById("chooseDeleteCurrent");
-    const deleteMatchedButton = document.getElementById("chooseDeleteMatched");
+    const libraryDuplicateOptions = document.getElementById("libraryDuplicateOptions");
 
     if (!dialog || !description || !hardlinkButton || !removeButton
-        || !deleteCurrentButton || !deleteMatchedButton) {
+        || !libraryDuplicateOptions) {
         submitFix(filePath, findingType, button, sourcePath, "hardlink");
         return;
     }
 
-    description.textContent = `Choose how to fix ${filePath}`;
     const hasDownloadsSource = typeof sourcePath === "string"
         && sourcePath.split("/").includes("Downloads");
     const hasLibrarySource = typeof sourcePath === "string"
@@ -82,12 +80,50 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
         && (sourcePath.split("/").includes("Movies")
             || sourcePath.split("/").includes("Series"));
     const isDuplicate = findingType === "duplicate";
+    const isLibraryDuplicate = isDuplicate && hasLibrarySource;
     hardlinkButton.disabled = !hasDownloadsSource;
     removeButton.disabled = !hasDownloadsSource;
     hardlinkButton.hidden = !hasDownloadsSource;
     removeButton.hidden = !hasDownloadsSource;
-    deleteCurrentButton.hidden = !(isDuplicate && hasLibrarySource);
-    deleteMatchedButton.hidden = !(isDuplicate && hasLibrarySource);
+    libraryDuplicateOptions.hidden = !isLibraryDuplicate;
+    libraryDuplicateOptions.replaceChildren();
+
+    if (isLibraryDuplicate) {
+        description.textContent = "Choose which library file to delete:";
+        [
+            { path: filePath, otherPath: sourcePath },
+            { path: sourcePath, otherPath: filePath }
+        ].forEach(({ path, otherPath }) => {
+            const option = document.createElement("div");
+            option.className = "library-duplicate-option";
+
+            const pathLabel = document.createElement("span");
+            pathLabel.className = "library-duplicate-path";
+            pathLabel.textContent = path;
+            pathLabel.title = path;
+
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "danger-button";
+            deleteButton.textContent = "Delete";
+            deleteButton.setAttribute("aria-label", `Delete ${path}`);
+            deleteButton.onclick = () => {
+                dialog.close();
+                submitFix(
+                    path,
+                    findingType,
+                    button,
+                    otherPath,
+                    "remove_library_duplicate"
+                );
+            };
+
+            option.append(pathLabel, deleteButton);
+            libraryDuplicateOptions.appendChild(option);
+        });
+    } else {
+        description.textContent = `Choose how to fix ${filePath}`;
+    }
     dialog.showModal();
 
     const closeDialog = () => dialog.close();
@@ -98,26 +134,6 @@ function fixFile(filePath, findingType, button, sourcePath = null) {
     removeButton.onclick = () => {
         closeDialog();
         submitFix(filePath, findingType, button, sourcePath, "remove_download");
-    };
-    deleteCurrentButton.onclick = () => {
-        closeDialog();
-        submitFix(
-            filePath,
-            findingType,
-            button,
-            sourcePath,
-            "remove_library_duplicate"
-        );
-    };
-    deleteMatchedButton.onclick = () => {
-        closeDialog();
-        submitFix(
-            sourcePath,
-            findingType,
-            button,
-            filePath,
-            "remove_library_duplicate"
-        );
     };
 }
 

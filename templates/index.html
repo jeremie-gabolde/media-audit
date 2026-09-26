@@ -24,11 +24,10 @@
     <dialog id="fixDialog">
         <h2>Choose fix action</h2>
         <p id="fixDialogDescription"></p>
+        <div id="libraryDuplicateOptions" class="library-duplicate-options" hidden></div>
         <div class="fix-dialog-actions">
             <button type="button" id="chooseHardlink">Replace with Downloads hardlink</button>
             <button type="button" id="chooseRemoveDownload" class="danger-button">Remove Downloads file</button>
-            <button type="button" id="chooseDeleteCurrent" class="danger-button" hidden>Delete this file</button>
-            <button type="button" id="chooseDeleteMatched" class="danger-button" hidden>Delete duplicate file</button>
             <button type="button" onclick="document.getElementById('fixDialog').close()">Cancel</button>
         </div>
     </dialog>

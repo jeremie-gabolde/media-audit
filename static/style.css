@@ -48,6 +48,33 @@ dialog::backdrop{
     flex-wrap:wrap;
 }
 
+.library-duplicate-options{
+    display:grid;
+    gap:8px;
+    margin:16px 0;
+}
+
+.library-duplicate-options[hidden]{
+    display:none;
+}
+
+.library-duplicate-option{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px;
+    background:#202020;
+    border:1px solid #555;
+    border-radius:4px;
+}
+
+.library-duplicate-path{
+    flex:1;
+    min-width:0;
+    overflow-wrap:anywhere;
+    font-family:monospace;
+}
+
 .danger-button{
     background:#a83232;
     color:#fff;
